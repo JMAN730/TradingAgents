@@ -20,6 +20,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import RunnableLambda
 
 
 def _sdk():
@@ -186,6 +187,22 @@ class ChatClaudeCode(BaseChatModel):
             content = final_text
         message = AIMessage(content=content)
         return ChatResult(generations=[ChatGeneration(message=message)])
+
+    def with_structured_output(self, schema, *, include_raw: bool = False, **kwargs):
+        """Route through the Agent SDK's json_schema output_format."""
+        if hasattr(schema, "model_json_schema"):
+            json_schema = schema.model_json_schema()
+
+            def _parse(message: AIMessage):
+                return schema.model_validate(json.loads(message.content))
+        else:
+            json_schema = schema
+
+            def _parse(message: AIMessage):
+                return json.loads(message.content)
+
+        bound = self.bind(structured_schema=json_schema)
+        return bound | RunnableLambda(_parse)
 
 
 def _build_tool_server(lc_tools):  # implemented in Task 4

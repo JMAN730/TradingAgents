@@ -1,10 +1,12 @@
 """Unit tests for the claude_code provider (Claude Agent SDK adapter)."""
 import asyncio
+import json
 import sys
 import types
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from pydantic import BaseModel
 
 pytestmark = pytest.mark.unit
 
@@ -219,3 +221,42 @@ class TestChatClaudeCodeText:
 
         with pytest.raises(RuntimeError, match="claude /login"):
             ChatClaudeCode(model="sonnet").invoke([HumanMessage(content="x")])
+
+
+class _Verdict(BaseModel):
+    action: str
+    confidence: float
+
+
+class TestStructuredOutput:
+    def _llm(self, monkeypatch, structured):
+        capture = {}
+        fake = make_fake_sdk(
+            final_text=json.dumps(structured) if structured else "",
+            structured=structured,
+            capture=capture,
+        )
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        return ChatClaudeCode(model="sonnet"), capture
+
+    def test_returns_pydantic_instance(self, monkeypatch):
+        llm, _ = self._llm(monkeypatch, {"action": "BUY", "confidence": 0.8})
+        structured_llm = llm.with_structured_output(_Verdict)
+        out = structured_llm.invoke([HumanMessage(content="decide")])
+        assert isinstance(out, _Verdict)
+        assert out.action == "BUY"
+
+    def test_schema_forwarded_as_output_format(self, monkeypatch):
+        llm, capture = self._llm(monkeypatch, {"action": "HOLD", "confidence": 0.5})
+        llm.with_structured_output(_Verdict).invoke([HumanMessage(content="x")])
+        fmt = capture["options"]["output_format"]
+        assert fmt["type"] == "json_schema"
+        assert fmt["schema"] == _Verdict.model_json_schema()
+
+    def test_dict_schema_returns_dict(self, monkeypatch):
+        llm, _ = self._llm(monkeypatch, {"k": "v"})
+        raw_schema = {"type": "object", "properties": {"k": {"type": "string"}}}
+        out = llm.with_structured_output(raw_schema).invoke([HumanMessage(content="x")])
+        assert out == {"k": "v"}
