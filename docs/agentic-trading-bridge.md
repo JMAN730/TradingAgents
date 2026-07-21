@@ -37,6 +37,24 @@ connection executes it.
    > proposal (or your judgment from buying power), SELL -> close the
    > position, HOLD -> do nothing. Report the order confirmation.
 
+## Automated schedule (current setup)
+
+Windows Task Scheduler fires three weekday runs (machine must be awake):
+
+| Task | Time (ET) | Prompt | What it does |
+|---|---|---|---|
+| `TradingAgents\OpenRun` | 09:47 | `scripts/prompts/open_run.md` | Pipeline on AAPL, MSFT, NVDA → execute signals |
+| `TradingAgents\MiddayRun` | 12:33 | `scripts/prompts/midday_run.md` | Web-research one new candidate → pipeline → execute (≤25% buying power) |
+| `TradingAgents\CloseRun` | 15:28 | `scripts/prompts/close_run.md` | Position review; pipeline only on holdings with adverse news |
+
+Each task runs `claude -p` headless (`scripts/tasks/*.cmd`) with
+`--permission-mode bypassPermissions`; logs to `results/agentic/cron_*.log`
+and orders to `results/agentic/trade_log.md`. Headless pipeline entry:
+`scripts/run_pipeline.py` (quick=haiku, deep=sonnet by default).
+
+Manage: `schtasks /Query /TN "TradingAgents\OpenRun"`, `/Change /DISABLE`,
+`/Delete`. Prompts are plain markdown — edit to retune rules.
+
 ## Risk posture
 
 Current owner preference: **full auto** — Robinhood-side manual review is OFF
