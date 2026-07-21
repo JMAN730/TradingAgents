@@ -92,7 +92,7 @@ class TestLazySdkImport:
             claude_code_client._sdk()
 
 
-def make_fake_sdk(final_text="FAKE RESULT", structured=None, capture=None):
+def make_fake_sdk(final_text="FAKE RESULT", structured=None, capture=None, subtype="success"):
     """Build a fake claude_agent_sdk module. `capture` (dict) records call args."""
     fake = types.ModuleType("claude_agent_sdk")
 
@@ -120,7 +120,7 @@ def make_fake_sdk(final_text="FAKE RESULT", structured=None, capture=None):
         if capture is not None:
             capture["prompt"] = prompt
         yield AssistantMessage([TextBlock("interim narration")])
-        yield ResultMessage(final_text, structured_output=structured)
+        yield ResultMessage(final_text, structured_output=structured, subtype=subtype)
 
     def tool(name, description, schema):
         def deco(fn):
@@ -223,6 +223,15 @@ class TestChatClaudeCodeText:
         from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
 
         with pytest.raises(RuntimeError, match="claude /login"):
+            ChatClaudeCode(model="sonnet").invoke([HumanMessage(content="x")])
+
+    def test_error_subtype_raises_instead_of_partial_report(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(final_text="", subtype="error_max_turns", capture=capture)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        with pytest.raises(RuntimeError, match="error_max_turns"):
             ChatClaudeCode(model="sonnet").invoke([HumanMessage(content="x")])
 
 

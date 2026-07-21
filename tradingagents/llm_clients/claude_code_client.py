@@ -159,6 +159,7 @@ class ChatClaudeCode(BaseChatModel):
         text_parts: list[str] = []
         final_text = ""
         structured: dict | None = None
+        subtype = "success"
         async for msg in sdk.query(prompt=prompt, options=options):
             if isinstance(msg, sdk.AssistantMessage):
                 for block in msg.content:
@@ -167,6 +168,13 @@ class ChatClaudeCode(BaseChatModel):
             elif isinstance(msg, sdk.ResultMessage):
                 structured = getattr(msg, "structured_output", None)
                 final_text = getattr(msg, "result", "") or ""
+                subtype = getattr(msg, "subtype", "success")
+        if subtype not in (None, "success"):
+            raise RuntimeError(
+                f"Claude Agent SDK run ended with subtype={subtype!r}; refusing to treat "
+                "partial output as a final response. If this is a tool-loop turn-budget "
+                "exhaustion (error_max_turns), consider raising max_tool_turns."
+            )
         if not final_text:
             final_text = "\n".join(text_parts)
         return final_text, structured
