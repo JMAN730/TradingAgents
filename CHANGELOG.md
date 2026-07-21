@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## Unreleased
+
+### Added
+
+- feat: `claude_code` provider — run all agents on a Claude Pro/Max
+  subscription via the Claude Agent SDK, no `ANTHROPIC_API_KEY` needed.
+
 ## [0.3.1] — 2026-07-05
 
 Correctness and stability patch: data look-ahead, graph-router crash-safety,

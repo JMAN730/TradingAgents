@@ -155,6 +155,23 @@ For local models, configure Ollama with `llm_provider: "ollama"`. The default en
 
 For any other OpenAI-compatible server (vLLM, LM Studio, llama.cpp, or a custom relay), use `llm_provider: "openai_compatible"` and set the endpoint via `backend_url` (or `TRADINGAGENTS_LLM_BACKEND_URL`), e.g. `http://localhost:8000/v1` for vLLM or `http://localhost:1234/v1` for LM Studio. The model is whatever your server serves. No key is needed for local servers; set `OPENAI_COMPATIBLE_API_KEY` when the endpoint requires one.
 
+### Claude Code (Pro/Max subscription — no API key)
+
+Run TradingAgents on your Claude subscription instead of API billing:
+
+1. `pip install "tradingagents[claude-code]"` (installs the Claude Agent SDK)
+2. Install the Claude Code CLI and log in once: `claude /login`
+   (or mint a long-lived token with `claude setup-token` and export it as
+   `CLAUDE_CODE_OAUTH_TOKEN` — useful for servers/CI)
+3. Pick **Claude Code** in the CLI provider menu, or set
+   `TRADINGAGENTS_LLM_PROVIDER=claude_code`. Model IDs accept aliases
+   (`haiku`, `sonnet`, `opus`) or full IDs (`claude-opus-4-8`).
+
+Notes: usage counts against your subscription limits. `temperature` and
+`max_tokens` are not configurable through the Agent SDK and are ignored for
+this provider. Tool-using analysts run their tool loop inside the Agent SDK
+rather than through LangGraph's ToolNode.
+
 Alternatively, copy `.env.example` to `.env` and fill in your keys:
 ```bash
 cp .env.example .env
@@ -197,7 +214,7 @@ An interface will appear showing results as they load, letting you track the age
 
 ### Implementation Details
 
-We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports multiple LLM providers: OpenAI, Google, Anthropic, xAI, DeepSeek, Qwen (Alibaba DashScope, international and China endpoints), GLM (Zhipu), MiniMax (global + China), OpenRouter, Ollama for local models, and Azure OpenAI for enterprise.
+We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports multiple LLM providers: OpenAI, Google, Anthropic (with Claude Code subscription option), xAI, DeepSeek, Qwen (Alibaba DashScope, international and China endpoints), GLM (Zhipu), MiniMax (global + China), OpenRouter, Ollama for local models, and Azure OpenAI for enterprise.
 
 ### Python Usage
 
