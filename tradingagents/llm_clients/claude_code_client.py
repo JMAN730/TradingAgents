@@ -36,8 +36,6 @@ def _sdk():
             "(or: pip install claude-agent-sdk). Then log in once with "
             "`claude /login` (Pro/Max subscription) or set CLAUDE_CODE_OAUTH_TOKEN."
         ) from e
-    if claude_agent_sdk is None:  # monkeypatched-away in tests
-        raise ImportError("claude-agent-sdk unavailable (install 'tradingagents[claude-code]')")
     return claude_agent_sdk
 
 
@@ -97,6 +95,11 @@ def _run_async(coro):
 
 # Claude Code built-in tools; always disallowed so the trading graph's SDK
 # calls can't touch the local filesystem, shell, or web.
+#
+# Hermeticity here is blocklist-based, not allowlist-based: permission_mode
+# is "bypassPermissions" and any builtin tool NOT named below remains
+# callable. This list must be kept in sync with Claude Code's built-in tool
+# additions -- a new builtin ships enabled-by-default until added here.
 _BUILTIN_TOOLS = [
     "Bash", "Read", "Write", "Edit", "Glob", "Grep",
     "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite", "Task",

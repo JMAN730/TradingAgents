@@ -171,6 +171,8 @@ class TestChatClaudeCodeText:
         assert opts["setting_sources"] == []
         assert opts["permission_mode"] == "bypassPermissions"
         assert "Bash" in opts["disallowed_tools"]
+        assert "Write" in opts["disallowed_tools"]
+        assert "WebFetch" in opts["disallowed_tools"]
 
     def test_prompt_contains_transcript(self, monkeypatch):
         llm, capture = self._model(monkeypatch)
@@ -321,6 +323,14 @@ class TestToolBridge:
         result = asyncio.run(server.tools[0]({"x": "y"}))
         assert result.get("is_error") is True
         assert "nope" in result["content"][0]["text"]
+
+
+class TestToolSchemaFallback:
+    def test_object_without_schema_attrs_falls_back_to_open_object(self):
+        from tradingagents.llm_clients.claude_code_client import _tool_schema
+
+        lc_tool = types.SimpleNamespace(name="x", description="d")
+        assert _tool_schema(lc_tool) == {"type": "object", "additionalProperties": True}
 
 
 class TestClaudeCodeClientRegistration:
