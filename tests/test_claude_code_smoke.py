@@ -16,6 +16,20 @@ pytestmark = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _subscription_auth_env(monkeypatch):
+    """Shed the dummy API keys conftest injects for unit tests.
+
+    conftest's autouse `_dummy_api_keys` sets ANTHROPIC_API_KEY="placeholder".
+    The Claude Code CLI resolves an API key ahead of subscription OAuth, so the
+    placeholder poisons the subprocess: auth fails and the CLI exits non-zero
+    instead of falling back to the `claude /login` credentials this smoke test
+    exists to exercise.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+
+
 def test_one_shot_text_roundtrip():
     from langchain_core.messages import HumanMessage
 
