@@ -13,9 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import json
 from typing import Any
 
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 
 
 def _sdk():
@@ -86,3 +90,103 @@ def _run_async(coro):
         return asyncio.run(coro)
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         return ex.submit(asyncio.run, coro).result()
+
+
+# Claude Code built-in tools; always disallowed so the trading graph's SDK
+# calls can't touch the local filesystem, shell, or web.
+_BUILTIN_TOOLS = [
+    "Bash", "Read", "Write", "Edit", "Glob", "Grep",
+    "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite", "Task",
+]
+
+_AUTH_HINT = (
+    "Claude Agent SDK call failed. If this is an auth problem, log in once "
+    "with `claude /login` (Pro/Max subscription) or run `claude setup-token` "
+    "and export CLAUDE_CODE_OAUTH_TOKEN. The `claude` CLI must be installed."
+)
+
+
+class ChatClaudeCode(BaseChatModel):
+    """Langchain chat model backed by the Claude Agent SDK (subscription auth).
+
+    temperature / max_retries / timeout are accepted for cross-provider config
+    compatibility but the Agent SDK does not expose them; they are ignored.
+    """
+
+    model: str
+    effort: str | None = None
+    max_tool_turns: int = 12
+    temperature: float | None = None   # ignored (not supported by Agent SDK)
+    max_retries: int | None = None     # ignored
+    timeout: float | None = None       # ignored
+
+    @property
+    def _llm_type(self) -> str:
+        return "claude-code"
+
+    def _build_options(self, system_prompt: str | None, kwargs: dict):
+        sdk = _sdk()
+        opts: dict[str, Any] = {
+            "system_prompt": system_prompt,
+            "model": self.model,
+            "setting_sources": [],
+            "permission_mode": "bypassPermissions",
+            "allowed_tools": [],
+            "disallowed_tools": list(_BUILTIN_TOOLS),
+            "max_turns": 1,
+        }
+        if self.effort:
+            opts["effort"] = self.effort
+        schema = kwargs.get("structured_schema")
+        if schema is not None:
+            opts["output_format"] = {"type": "json_schema", "schema": schema}
+        lc_tools = kwargs.get("langchain_tools")
+        if lc_tools:
+            server, tool_names = _build_tool_server(lc_tools)
+            opts["mcp_servers"] = {"toolkit": server}
+            opts["allowed_tools"] = tool_names
+            opts["max_turns"] = self.max_tool_turns
+        return sdk.ClaudeAgentOptions(**opts)
+
+    async def _acall_sdk(self, prompt: str, options) -> tuple[str, dict | None]:
+        sdk = _sdk()
+        text_parts: list[str] = []
+        final_text = ""
+        structured: dict | None = None
+        async for msg in sdk.query(prompt=prompt, options=options):
+            if isinstance(msg, sdk.AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, sdk.TextBlock):
+                        text_parts.append(block.text)
+            elif isinstance(msg, sdk.ResultMessage):
+                structured = getattr(msg, "structured_output", None)
+                final_text = getattr(msg, "result", "") or ""
+        if not final_text:
+            final_text = "\n".join(text_parts)
+        return final_text, structured
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        system_prompt, prompt = _split_messages(messages)
+        options = self._build_options(system_prompt, kwargs)
+        try:
+            final_text, structured = _run_async(self._acall_sdk(prompt, options))
+        except ImportError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"{_AUTH_HINT} Underlying error: {e}") from e
+        if kwargs.get("structured_schema") is not None and structured is not None:
+            content = json.dumps(structured)
+        else:
+            content = final_text
+        message = AIMessage(content=content)
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+
+def _build_tool_server(lc_tools):  # implemented in Task 4
+    raise NotImplementedError("tool bridging arrives in Task 4")

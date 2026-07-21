@@ -1,6 +1,7 @@
 """Unit tests for the claude_code provider (Claude Agent SDK adapter)."""
 import asyncio
 import sys
+import types
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -86,3 +87,135 @@ class TestLazySdkImport:
         monkeypatch.setitem(sys.modules, "claude_agent_sdk", None)
         with pytest.raises(ImportError, match="claude-code"):
             claude_code_client._sdk()
+
+
+def make_fake_sdk(final_text="FAKE RESULT", structured=None, capture=None):
+    """Build a fake claude_agent_sdk module. `capture` (dict) records call args."""
+    fake = types.ModuleType("claude_agent_sdk")
+
+    class TextBlock:
+        def __init__(self, text):
+            self.text = text
+
+    class AssistantMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class ResultMessage:
+        def __init__(self, result, structured_output=None, subtype="success"):
+            self.result = result
+            self.structured_output = structured_output
+            self.subtype = subtype
+
+    class ClaudeAgentOptions:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            if capture is not None:
+                capture["options"] = kwargs
+
+    async def query(prompt=None, options=None):
+        if capture is not None:
+            capture["prompt"] = prompt
+        yield AssistantMessage([TextBlock("interim narration")])
+        yield ResultMessage(final_text, structured_output=structured)
+
+    def tool(name, description, schema):
+        def deco(fn):
+            fn._sdk_tool = (name, description, schema)
+            return fn
+        return deco
+
+    def create_sdk_mcp_server(name, version, tools):
+        server = types.SimpleNamespace(name=name, version=version, tools=tools)
+        if capture is not None:
+            capture["mcp_server"] = server
+        return server
+
+    fake.TextBlock = TextBlock
+    fake.AssistantMessage = AssistantMessage
+    fake.ResultMessage = ResultMessage
+    fake.ClaudeAgentOptions = ClaudeAgentOptions
+    fake.query = query
+    fake.tool = tool
+    fake.create_sdk_mcp_server = create_sdk_mcp_server
+    return fake
+
+
+class TestChatClaudeCodeText:
+    def _model(self, monkeypatch, **fake_kwargs):
+        capture = {}
+        fake = make_fake_sdk(capture=capture, **fake_kwargs)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        return ChatClaudeCode(model="sonnet"), capture
+
+    def test_invoke_returns_ai_message_with_result_text(self, monkeypatch):
+        llm, _ = self._model(monkeypatch, final_text="AAPL looks strong.")
+        out = llm.invoke([HumanMessage(content="Analyze AAPL")])
+        assert isinstance(out, AIMessage)
+        assert out.content == "AAPL looks strong."
+        assert out.tool_calls == []
+
+    def test_options_are_hermetic_one_shot(self, monkeypatch):
+        llm, capture = self._model(monkeypatch)
+        llm.invoke([SystemMessage(content="Be terse."), HumanMessage(content="hi")])
+        opts = capture["options"]
+        assert opts["system_prompt"] == "Be terse."
+        assert opts["model"] == "sonnet"
+        assert opts["max_turns"] == 1
+        assert opts["allowed_tools"] == []
+        assert opts["setting_sources"] == []
+        assert opts["permission_mode"] == "bypassPermissions"
+        assert "Bash" in opts["disallowed_tools"]
+
+    def test_prompt_contains_transcript(self, monkeypatch):
+        llm, capture = self._model(monkeypatch)
+        llm.invoke([HumanMessage(content="first"), AIMessage(content="second")])
+        assert "User: first" in capture["prompt"]
+        assert "Assistant: second" in capture["prompt"]
+
+    def test_effort_forwarded_when_set(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(capture=capture)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        ChatClaudeCode(model="opus", effort="high").invoke([HumanMessage(content="x")])
+        assert capture["options"]["effort"] == "high"
+
+    def test_effort_omitted_when_unset(self, monkeypatch):
+        llm, capture = self._model(monkeypatch)
+        llm.invoke([HumanMessage(content="x")])
+        assert "effort" not in capture["options"]
+
+    def test_temperature_and_max_retries_accepted_and_ignored(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(capture=capture)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        llm = ChatClaudeCode(model="sonnet", temperature=0.3, max_retries=5)
+        llm.invoke([HumanMessage(content="x")])
+        assert "temperature" not in capture["options"]
+        assert "max_retries" not in capture["options"]
+
+    def test_falls_back_to_assistant_text_when_result_empty(self, monkeypatch):
+        llm, _ = self._model(monkeypatch, final_text="")
+        out = llm.invoke([HumanMessage(content="x")])
+        assert out.content == "interim narration"
+
+    def test_sdk_error_wrapped_with_login_hint(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(capture=capture)
+
+        async def boom(prompt=None, options=None):
+            raise RuntimeError("process exited")
+            yield  # pragma: no cover - makes this an async generator
+
+        fake.query = boom
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        with pytest.raises(RuntimeError, match="claude /login"):
+            ChatClaudeCode(model="sonnet").invoke([HumanMessage(content="x")])
