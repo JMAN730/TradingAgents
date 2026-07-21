@@ -208,6 +208,41 @@ class ChatClaudeCode(BaseChatModel):
         bound = self.bind(structured_schema=json_schema)
         return bound | RunnableLambda(_parse)
 
+    def bind_tools(self, tools, **kwargs):
+        """Expose langchain tools to the SDK's internal agent loop.
 
-def _build_tool_server(lc_tools):  # implemented in Task 4
-    raise NotImplementedError("tool bridging arrives in Task 4")
+        The SDK executes the whole tool loop in one call, so responses carry
+        no tool_calls and LangGraph's ToolNode cycle never fires — analysts
+        receive the final report directly.
+        """
+        return self.bind(langchain_tools=list(tools))
+
+
+def _tool_schema(lc_tool) -> dict:
+    """Best-effort JSON schema for a langchain tool's arguments."""
+    args_schema = getattr(lc_tool, "tool_call_schema", None) or getattr(lc_tool, "args_schema", None)
+    if args_schema is not None and hasattr(args_schema, "model_json_schema"):
+        return args_schema.model_json_schema()
+    return {"type": "object", "additionalProperties": True}
+
+
+def _build_tool_server(lc_tools):
+    """Wrap langchain tools in an in-process SDK MCP server."""
+    sdk = _sdk()
+    sdk_tools = []
+    tool_names = []
+
+    for lc_tool in lc_tools:
+        @sdk.tool(lc_tool.name, lc_tool.description or lc_tool.name, _tool_schema(lc_tool))
+        async def handler(args: dict, _lc_tool=lc_tool):
+            try:
+                result = await asyncio.to_thread(_lc_tool.invoke, args)
+                return {"content": [{"type": "text", "text": str(result)}]}
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
+
+        sdk_tools.append(handler)
+        tool_names.append(f"mcp__toolkit__{lc_tool.name}")
+
+    server = sdk.create_sdk_mcp_server(name="toolkit", version="1.0.0", tools=sdk_tools)
+    return server, tool_names

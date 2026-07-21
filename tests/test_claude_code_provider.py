@@ -6,6 +6,7 @@ import types
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool as lc_tool_decorator
 from pydantic import BaseModel
 
 pytestmark = pytest.mark.unit
@@ -265,3 +266,58 @@ class TestStructuredOutput:
         llm, _ = self._llm(monkeypatch, {"action": "BUY", "confidence": 0.8})
         with pytest.raises(NotImplementedError, match="include_raw"):
             llm.with_structured_output(_Verdict, include_raw=True)
+
+
+@lc_tool_decorator
+def get_price(symbol: str) -> str:
+    """Get latest price for a symbol."""
+    return f"{symbol}: 100.0"
+
+
+class TestToolBridge:
+    def _bound(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(final_text="report text", capture=capture)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import ChatClaudeCode
+
+        llm = ChatClaudeCode(model="sonnet")
+        return llm.bind_tools([get_price]), capture
+
+    def test_tools_registered_as_mcp_server(self, monkeypatch):
+        bound, capture = self._bound(monkeypatch)
+        out = bound.invoke([HumanMessage(content="price of AAPL?")])
+        opts = capture["options"]
+        assert opts["allowed_tools"] == ["mcp__toolkit__get_price"]
+        assert "toolkit" in opts["mcp_servers"]
+        assert opts["max_turns"] > 1
+        assert out.content == "report text"
+        assert out.tool_calls == []
+
+    def test_tool_handler_invokes_langchain_tool(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(capture=capture)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import _build_tool_server
+
+        server, names = _build_tool_server([get_price])
+        assert names == ["mcp__toolkit__get_price"]
+        handler = server.tools[0]
+        result = asyncio.run(handler({"symbol": "MSFT"}))
+        assert result["content"][0]["text"] == "MSFT: 100.0"
+
+    def test_tool_handler_reports_errors(self, monkeypatch):
+        capture = {}
+        fake = make_fake_sdk(capture=capture)
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.claude_code_client import _build_tool_server
+
+        @lc_tool_decorator
+        def broken(x: str) -> str:
+            """Always fails."""
+            raise ValueError("nope")
+
+        server, _ = _build_tool_server([broken])
+        result = asyncio.run(server.tools[0]({"x": "y"}))
+        assert result.get("is_error") is True
+        assert "nope" in result["content"][0]["text"]
