@@ -363,3 +363,25 @@ class TestClaudeCodeClientRegistration:
         assert type(llm).__name__ == "ChatClaudeCode"
         assert llm.model == "opus"
         assert llm.effort == "high"
+
+
+class TestGraphAndCliWiring:
+    def test_provider_kwargs_include_effort(self):
+        from tradingagents.graph.trading_graph import TradingAgentsGraph
+
+        # Follows the established pattern in tests/test_temperature_config.py
+        # (TestProviderKwargsTemperature._kwargs_for): construct a bare instance
+        # via __new__ and set only the `config` attribute the method reads,
+        # rather than the brief's speculative SimpleNamespace/__wrapped__ sketch.
+        graph = TradingAgentsGraph.__new__(TradingAgentsGraph)
+        graph.config = {"llm_provider": "claude_code", "anthropic_effort": "high"}
+        kwargs = TradingAgentsGraph._get_provider_kwargs(graph)
+        assert kwargs.get("effort") == "high"
+
+    def test_cli_provider_table_row(self):
+        from cli.utils import _llm_provider_table
+
+        keys = [row[1] for row in _llm_provider_table()]
+        assert "claude_code" in keys
+        row = next(r for r in _llm_provider_table() if r[1] == "claude_code")
+        assert row[2] is None  # no backend URL
