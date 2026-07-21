@@ -190,6 +190,10 @@ class ChatClaudeCode(BaseChatModel):
 
     def with_structured_output(self, schema, *, include_raw: bool = False, **kwargs):
         """Route through the Agent SDK's json_schema output_format."""
+        if include_raw:
+            raise NotImplementedError(
+                "include_raw=True is not supported by the claude_code provider"
+            )
         if hasattr(schema, "model_json_schema"):
             json_schema = schema.model_json_schema()
 

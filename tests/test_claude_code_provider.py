@@ -260,3 +260,8 @@ class TestStructuredOutput:
         raw_schema = {"type": "object", "properties": {"k": {"type": "string"}}}
         out = llm.with_structured_output(raw_schema).invoke([HumanMessage(content="x")])
         assert out == {"k": "v"}
+
+    def test_include_raw_rejected(self, monkeypatch):
+        llm, _ = self._llm(monkeypatch, {"action": "BUY", "confidence": 0.8})
+        with pytest.raises(NotImplementedError, match="include_raw"):
+            llm.with_structured_output(_Verdict, include_raw=True)
