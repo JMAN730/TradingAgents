@@ -188,6 +188,18 @@ MODEL_OPTIONS: ProviderModeOptions = {
     "nvidia": _CUSTOM_ONLY,
     # Bedrock model IDs / cross-region inference profile IDs are user-specified.
     "bedrock": _CUSTOM_ONLY,
+    # Claude Code subscription auth (Agent SDK): aliases resolve via the CLI's
+    # bundled model list, so any model ID is accepted (see _ANY_MODEL_PROVIDERS).
+    "claude_code": {
+        "quick": [
+            ("Claude Haiku 4.5 — fastest", "haiku"),
+            ("Claude Sonnet (latest) — balanced", "sonnet"),
+        ],
+        "deep": [
+            ("Claude Sonnet (latest) — balanced", "sonnet"),
+            ("Claude Opus (latest) — most capable", "opus"),
+        ],
+    },
 }
 
 

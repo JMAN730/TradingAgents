@@ -321,3 +321,45 @@ class TestToolBridge:
         result = asyncio.run(server.tools[0]({"x": "y"}))
         assert result.get("is_error") is True
         assert "nope" in result["content"][0]["text"]
+
+
+class TestClaudeCodeClientRegistration:
+    def test_factory_returns_claude_code_client(self):
+        from tradingagents.llm_clients.factory import create_llm_client
+
+        client = create_llm_client("claude_code", "sonnet")
+        assert type(client).__name__ == "ClaudeCodeClient"
+        assert client.get_provider_name() == "claude_code"
+
+    def test_api_key_env_is_keyless(self):
+        from tradingagents.llm_clients.api_key_env import get_api_key_env
+
+        assert get_api_key_env("claude_code") is None
+
+    def test_any_model_id_validates(self):
+        from tradingagents.llm_clients.validators import validate_model
+
+        assert validate_model("claude_code", "sonnet") is True
+        assert validate_model("claude_code", "claude-opus-4-8") is True
+        assert validate_model("claude_code", "anything-at-all") is True
+
+    def test_model_catalog_has_entries(self):
+        from tradingagents.llm_clients.model_catalog import get_model_options
+
+        quick = get_model_options("claude_code", "quick")
+        deep = get_model_options("claude_code", "deep")
+        assert any(model_id == "sonnet" for _, model_id in quick)
+        assert any(model_id == "opus" for _, model_id in deep)
+
+    def test_get_llm_builds_chat_claude_code(self, monkeypatch):
+        fake = make_fake_sdk()
+        monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake)
+        from tradingagents.llm_clients.factory import create_llm_client
+
+        client = create_llm_client(
+            "claude_code", "opus", effort="high", temperature=0.2, max_retries=3
+        )
+        llm = client.get_llm()
+        assert type(llm).__name__ == "ChatClaudeCode"
+        assert llm.model == "opus"
+        assert llm.effort == "high"

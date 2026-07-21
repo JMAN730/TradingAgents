@@ -22,6 +22,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
 
+from .base_client import BaseLLMClient
+
 
 def _sdk():
     """Import claude_agent_sdk lazily so the core install stays lean."""
@@ -246,3 +248,24 @@ def _build_tool_server(lc_tools):
 
     server = sdk.create_sdk_mcp_server(name="toolkit", version="1.0.0", tools=sdk_tools)
     return server, tool_names
+
+
+class ClaudeCodeClient(BaseLLMClient):
+    """Provider client for Claude via a Claude Code subscription (Agent SDK).
+
+    Keyless: auth comes from `claude /login` OAuth or CLAUDE_CODE_OAUTH_TOKEN.
+    """
+
+    provider = "claude_code"
+
+    _ACCEPTED_KWARGS = ("effort", "max_tool_turns", "temperature", "max_retries", "timeout")
+
+    def get_llm(self) -> Any:
+        self.warn_if_unknown_model()
+        kwargs = {k: v for k, v in self.kwargs.items() if k in self._ACCEPTED_KWARGS}
+        return ChatClaudeCode(model=self.model, **kwargs)
+
+    def validate_model(self) -> bool:
+        from .validators import validate_model
+
+        return validate_model("claude_code", self.model)
