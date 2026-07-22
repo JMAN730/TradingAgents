@@ -66,4 +66,11 @@ every trade_log entry as `value: $X (goal $288 by 2027-01-22)`.
 - Append every run to `results/agentic/trade_log.md`: date/slot, candidates
   considered + why picked/skipped, signals, orders with confirmation IDs and
   fills, account value, one-line rationale for sizing.
+- **Update `results/agentic/pnl_report.md` every run** (rewrite in place,
+  keep the same section structure): realized P&L (get_pnl_trade_history,
+  span=all), unrealized per open position (positions × live quotes), actual
+  fees from fill records, estimated tax on realized gains (assume 24%
+  federal short-term rate, no state, unless the owner corrects it), and
+  wash-sale flags (any buy within 30 days of a loss sale in the same
+  ticker). Include progress vs the $288 goal.
 - MCP auth/connectivity failure: log and stop. No endless retries.
