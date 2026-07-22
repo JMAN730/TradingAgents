@@ -1,0 +1,69 @@
+# Standing rules — Agentic trading loop (v2, 2026-07-22)
+
+These rules apply to every run slot. Slot prompts reference this file.
+
+## Goal
+
++30% account value in 6 months. Baseline: $221.85 on 2026-07-22 → target
+~$288 by 2027-01-22. Aggressive risk tolerance by the account owner's
+explicit choice. Log current account value (get_portfolio total_value) in
+every trade_log entry as `value: $X (goal $288 by 2027-01-22)`.
+
+## Account
+
+- Robinhood **Agentic account 484265285 only**. Never touch any other account.
+- The loop manages the ENTIRE account, including positions it did not open.
+  Any holding may be sold to fund a better idea or cut a loser.
+
+## Instruments & order types
+
+- **Equities**: fractional-share MARKET orders, long only, no shorting.
+  Fractional amounts allowed down to broker minimum (~$1 notional).
+- **Options** (gated): each run, check `option_level` for account 484265285
+  via get_accounts (fresh call, never cached). If empty or level_0 → equity
+  only, skip options silently. If level_2+ → single-leg long calls/puts,
+  covered calls, cash-secured puts allowed. NO multi-leg/spreads (MCP does
+  not support them). Options use LIMIT orders at the bid/ask midpoint —
+  never market orders on options. If unfilled after ~10 minutes, cancel and
+  re-place once at slightly worse than mid; if still unfilled, cancel and log.
+- Never: crypto, futures, event contracts, equity limit/stop/conditional
+  orders.
+
+## Sizing & risk
+
+- Max 50% of current buying power on a single high-conviction BUY.
+- Max 30% of current buying power on a single option contract (premium).
+- Max 8 open positions total (options count as positions).
+- Cut losers: SELL signal from pipeline → close full position same run.
+  Position down >15% from cost WITH adverse news → close even without a
+  pipeline run.
+- Leave ≥$2 cash buffer after any buy.
+
+## Candidate sourcing (undervalued hunt)
+
+- Saved Robinhood scan **"Undervalued hunt"**, scan_id
+  `80b034c8-a198-40de-801c-3dc046c5098b` (run via run_scan). Filters:
+  P/E 0–18, RSI(14,1d) < 40, avg volume(30d) > 1M, market cap > $2B,
+  price > $5.
+- Scanner output is a candidate list, not a buy list. Web-validate top hits:
+  WHY is it cheap? Skip value traps (secular decline, fraud/accounting
+  clouds, broken balance sheet, dividend-cut spirals). Prefer names where
+  cheapness looks temporary (sector rotation, overdone reaction to fixable
+  news).
+- Skip tickers already held unless re-running for a SELL decision.
+- Closed-end funds / REITs with distorted P/E (PDI, GOF, ARR type) usually
+  screen falsely cheap — treat with extra skepticism.
+
+## Pipeline
+
+- Analysis via `python scripts/run_pipeline.py --tickers <T,...> --slot <slot>`;
+  decisions in `results/agentic/<date>-<slot>.json`. BUY/SELL/HOLD per ticker.
+- Pipeline decision is the primary signal; sizing and instrument choice
+  (shares vs calls) are the executing agent's judgment within these rules.
+
+## Logging & failure
+
+- Append every run to `results/agentic/trade_log.md`: date/slot, candidates
+  considered + why picked/skipped, signals, orders with confirmation IDs and
+  fills, account value, one-line rationale for sizing.
+- MCP auth/connectivity failure: log and stop. No endless retries.
