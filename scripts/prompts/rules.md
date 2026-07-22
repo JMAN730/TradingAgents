@@ -57,9 +57,26 @@ every trade_log entry as `value: $X (goal $288 by 2027-01-22)`.
 ## Pipeline
 
 - Analysis via `python scripts/run_pipeline.py --tickers <T,...> --slot <slot>`;
-  decisions in `results/agentic/<date>-<slot>.json`. BUY/SELL/HOLD per ticker.
+  decisions in `results/agentic/<date>-<slot>.json`. Signal mapping:
+  Overweight = BUY, Underweight = SELL, anything else = HOLD.
 - Pipeline decision is the primary signal; sizing and instrument choice
   (shares vs calls) are the executing agent's judgment within these rules.
+
+## Rotation (open run only)
+
+- Each open run, identify the 2 holdings with the worst unrealized P&L %
+  (exclude positions opened within the last 3 trading days). Pipeline them
+  IN THE SAME RUN as the new scanner candidates.
+- Execute rotation after reading all signals:
+  - Holding = SELL → sell full position regardless of candidates.
+  - Candidate = BUY but buying power is under the intended size → sell the
+    weakest non-BUY holding (SELL first, then HOLD with worst P&L) to fund
+    it. Never sell a holding rated BUY.
+  - Max 2 rotation sells per day; swaps settle as market orders, sell first,
+    then buy.
+- Wash-sale awareness: rotation sells at a loss are fine, but do not rebuy
+  a loss-sold ticker within 30 days; note every loss sale in pnl_report.md
+  wash-sale watch.
 
 ## Logging & failure
 

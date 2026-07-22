@@ -14,11 +14,15 @@ nobody is watching. Repo: current working directory.
    (scan_id 80b034c8-a198-40de-801c-3dc046c5098b). Web-validate the most
    interesting hits per rules.md value-trap checklist. Pick the TOP 2
    candidates not already held.
-4. Run: `python scripts/run_pipeline.py --tickers <PICK1,PICK2> --slot open`
-   (takes several minutes per ticker; wait for it).
-5. Read results/agentic/<date>-open.json and execute per rules.md:
-   - BUY → fractional-share market order (or single-leg call if options
-     enabled and the setup clearly favors leverage), sized per rules.md.
-   - SELL → close any existing position in that ticker.
-   - HOLD or error → no action.
-6. Log per rules.md.
+4. Rotation picks: per rules.md Rotation section, select the 2 worst
+   unrealized-P&L holdings (excluding positions opened in the last 3
+   trading days).
+5. Run: `python scripts/run_pipeline.py --tickers <PICK1,PICK2,HELD1,HELD2>
+   --slot open` (takes several minutes per ticker; wait for it).
+6. Read results/agentic/<date>-open.json and execute per rules.md, rotation
+   rules included:
+   - Holding SELL → close it. Candidate BUY → fractional-share market order
+     (or single-leg call if options enabled and the setup clearly favors
+     leverage), sized per rules.md; fund by rotation sell if buying power
+     short. HOLD or error → no action.
+7. Log per rules.md and update pnl_report.md.
