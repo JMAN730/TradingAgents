@@ -64,6 +64,12 @@ every trade_log entry as `value: $X (goal $288 by 2027-01-22)`.
   background job and never end your reply while it runs: this session
   terminates the moment your reply ends, which kills the pipeline and skips
   the trade. The run is not done until orders are placed and logs written.
+- **Before placing any orders, validate the decision file**:
+  - Confirm it exists and is freshly produced by the current run (check
+    `generated_at` is recent, within the last few minutes).
+  - Confirm `date` and `slot` fields match what you requested.
+  - Confirm `decisions` array contains exactly the tickers you requested.
+  - If any validation fails or the run was interrupted, STOP without trading.
 - Pipeline decision is the primary signal; sizing and instrument choice
   (shares vs calls) are the executing agent's judgment within these rules.
 
