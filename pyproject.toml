@@ -44,6 +44,12 @@ dev = [
 bedrock = [
     "langchain-aws>=1.5.0",
 ]
+# Claude Agent SDK support for subscription-based Claude Code access.
+# Floor (>=0.2.124) is the verified release supporting setting_sources, permission_mode,
+# effort, output_format, and disallowed_tools SDK kwargs used by the adapter.
+claude-code = [
+    "claude-agent-sdk>=0.2.124",
+]
 
 [project.scripts]
 tradingagents = "cli.main:app"
@@ -64,6 +70,8 @@ markers = [
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
+    # langchain-core imports pydantic's v1 shim, which warns on Python 3.14+.
+    "ignore:Core Pydantic V1:UserWarning",
 ]
 
 [tool.ruff]
