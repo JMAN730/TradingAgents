@@ -59,6 +59,11 @@ every trade_log entry as `value: $X (goal $288 by 2027-01-22)`.
 - Analysis via `python scripts/run_pipeline.py --tickers <T,...> --slot <slot>`;
   decisions in `results/agentic/<date>-<slot>.json`. Signal mapping:
   Overweight = BUY, Underweight = SELL, anything else = HOLD.
+- **Run the pipeline in the FOREGROUND and wait for it to finish** (it takes
+  ~20 minutes per ticker — that is normal, keep waiting). NEVER run it as a
+  background job and never end your reply while it runs: this session
+  terminates the moment your reply ends, which kills the pipeline and skips
+  the trade. The run is not done until orders are placed and logs written.
 - Pipeline decision is the primary signal; sizing and instrument choice
   (shares vs calls) are the executing agent's judgment within these rules.
 
