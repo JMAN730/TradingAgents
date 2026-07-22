@@ -70,7 +70,8 @@ every trade_log entry as `value: $X (goal $288 by 2027-01-22)`.
   keep the same section structure): realized P&L (get_pnl_trade_history,
   span=all), unrealized per open position (positions × live quotes), actual
   fees from fill records, estimated tax on realized gains (assume 24%
-  federal short-term rate, no state, unless the owner corrects it), and
+  federal short-term rate + 4.25% Michigan flat rate = 28.25% combined,
+  unless the owner corrects it), and
   wash-sale flags (any buy within 30 days of a loss sale in the same
   ticker). Include progress vs the $288 goal.
 - MCP auth/connectivity failure: log and stop. No endless retries.
