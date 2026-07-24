@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import uuid
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any
 
 import requests
@@ -101,9 +102,13 @@ class QuantDingerClient:
             raise QuantDingerError(
                 f"{path} returned non-JSON response (HTTP {response.status_code})"
             ) from exc
-        if response.status_code >= 400 or payload.get("code"):
+        if not isinstance(payload, dict) or "code" not in payload:
             raise QuantDingerError(
-                f"{path} failed (HTTP {response.status_code}, code {payload.get('code')}): "
+                f"{path} returned an invalid gateway envelope (HTTP {response.status_code})"
+            )
+        if response.status_code >= 400 or payload["code"] != 0:
+            raise QuantDingerError(
+                f"{path} failed (HTTP {response.status_code}, code {payload['code']}): "
                 f"{payload.get('message')}"
             )
         return payload.get("data")
@@ -169,10 +174,12 @@ class QuantDingerExecutor:
         if side is None:
             return None
         price = self.client.get_price(ticker, market=self.market)
-        if not price or price <= 0:
+        if price is None or not isfinite(price) or price <= 0:
             raise QuantDingerError(f"no price available for {ticker} in {self.market}")
+        if not isfinite(self.order_notional) or self.order_notional <= 0:
+            raise QuantDingerError("order_notional must be finite and positive")
         qty = round(self.order_notional * weight / price, self.qty_precision)
-        if qty <= 0:
+        if not isfinite(qty) or qty <= 0:
             raise QuantDingerError(
                 f"computed qty for {ticker} is zero (notional {self.order_notional}, price {price})"
             )
@@ -194,14 +201,18 @@ class QuantDingerExecutor:
     ) -> dict:
         """Execute one decision; returns a receipt describing what happened.
 
-        The idempotency key is derived from (date, slot, ticker, side) so
-        re-running the same pipeline slot replays the recorded order instead of
-        doubling the position.
+        The idempotency key is derived from (date, slot, market, ticker, side)
+        so re-running the same pipeline slot replays the recorded order instead
+        of doubling the position. A non-empty ``trade_date`` is required for
+        any executable order — without it the key would never vary between
+        runs and every later execution would replay the first order.
         """
         plan = self.plan_order(ticker, signal)
         if plan is None:
             return {"ticker": ticker, "signal": signal, "action": "none", "order": None}
-        idempotency_key = f"ta-{trade_date}-{slot}-{ticker}-{plan['side']}"
+        if not trade_date:
+            raise QuantDingerError("trade_date is required for an executable order")
+        idempotency_key = f"ta-{trade_date}-{slot}-{plan['market']}-{ticker}-{plan['side']}"
         order = self.client.place_order(
             market=plan["market"],
             symbol=plan["symbol"],

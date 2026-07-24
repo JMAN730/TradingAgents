@@ -30,8 +30,18 @@ sys.path.insert(0, str(REPO_ROOT))
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tickers", required=True, help="Comma-separated tickers")
-    parser.add_argument("--slot", default="adhoc", help="Run label: open|midday|close|adhoc")
-    parser.add_argument("--date", default=None, help="Trade date YYYY-MM-DD (default: today)")
+    parser.add_argument(
+        "--slot",
+        choices=("open", "midday", "close", "adhoc"),
+        default="adhoc",
+        help="Run label",
+    )
+    parser.add_argument(
+        "--date",
+        type=datetime.date.fromisoformat,
+        default=None,
+        help="Trade date YYYY-MM-DD (default: today)",
+    )
     parser.add_argument("--provider", default="claude_code", help="LLM provider")
     parser.add_argument("--deep-model", default="sonnet")
     parser.add_argument("--quick-model", default="haiku")
@@ -64,7 +74,7 @@ def main() -> int:
             order_notional=args.notional,
         )
 
-    trade_date = args.date or datetime.date.today().isoformat()
+    trade_date = (args.date or datetime.date.today()).isoformat()
     config = dict(DEFAULT_CONFIG)
     config["llm_provider"] = args.provider
     config["deep_think_llm"] = args.deep_model

@@ -82,6 +82,7 @@ orders.
 ## Going the other way
 
 QuantDinger strategies can also consult TradingAgents in-process through the
-`TradingAgentsDecisionClient` shipped in the QuantDinger repo
-(`docs/agent/TRADINGAGENTS_INTEGRATION.md` there) — useful when QuantDinger
-should own sizing/risk and TradingAgents only supplies direction.
+`TradingAgentsDecisionClient` added by the companion pull request
+([jman730/QuantDinger#1](https://github.com/jman730/QuantDinger/pull/1),
+documented there in `docs/agent/TRADINGAGENTS_INTEGRATION.md`) — useful when
+QuantDinger should own sizing/risk and TradingAgents only supplies direction.
